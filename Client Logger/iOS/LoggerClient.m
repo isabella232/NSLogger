@@ -262,6 +262,7 @@ Logger *LoggerInit(void)
 	logger->sendBufferSize = 4096;
 	
 	logger->options = LOGGER_DEFAULT_OPTIONS;
+    logger->maxConsoleLevel = 2;
 #if LOGGER_DEBUG
 	// when debugging NSLogger itself, don't hijack the system console
 	// as we are sending messages to it for display
@@ -294,20 +295,30 @@ Logger *LoggerInit(void)
 	return logger;
 }
 
-void LoggerSetOptions(Logger *logger, uint32_t options)
+void LoggerSetConsoleLogLevel(Logger *logger, uint32_t level)
 {
-	LOGGERDBG(CFSTR("LoggerSetOptions options=0x%08lx"), options);
-
-	// If we choose to log to system console
-	// make sure we are not configured to capture the system console
-	// When debugging NSLogger itself, we never capture the system console either
-	if (options & kLoggerOption_LogToConsole)
-		options &= (uint32_t)~kLoggerOption_CaptureSystemConsole;
+//	LOGGERDBG(CFSTR("LoggerSetConsoleLogLevel options=0x%08lx"), level);
 
 	if (logger == NULL)
 		logger = LoggerGetDefaultLogger();
 	if (logger != NULL)
-		logger->options = options;
+		logger->maxConsoleLevel = level;
+}
+
+void LoggerSetOptions(Logger *logger, uint32_t options)
+{
+    LOGGERDBG(CFSTR("LoggerSetOptions options=0x%08lx"), options);
+    
+    // If we choose to log to system console
+    // make sure we are not configured to capture the system console
+    // When debugging NSLogger itself, we never capture the system console either
+    if (options & kLoggerOption_LogToConsole)
+        options &= (uint32_t)~kLoggerOption_CaptureSystemConsole;
+    
+    if (logger == NULL)
+        logger = LoggerGetDefaultLogger();
+    if (logger != NULL)
+        logger->options = options;
 }
 
 void LoggerSetupBonjour(Logger *logger, CFStringRef bonjourServiceType, CFStringRef bonjourServiceName)
@@ -692,7 +703,7 @@ static CFStringRef LoggerCreateStringRepresentationFromBinaryData(CFDataRef data
 	return s;
 }
 
-static void LoggerLogToConsole(CFDataRef data)
+static void LoggerLogToConsole(CFDataRef data, uint32_t maxLogLevel)
 {
 	// Decode and log a message to the console. Doing this from the worker thread
 	// allow us to serialize logging, which is a benefit that NSLog() doesn't have.
@@ -705,7 +716,7 @@ static void LoggerLogToConsole(CFDataRef data)
 	struct timeval timestamp;
 	bzero(&timestamp, sizeof(timestamp));
 	int type = LOGMSG_TYPE_LOG, contentsType = PART_TYPE_STRING;
-	int imgWidth=0, imgHeight=0;
+	int imgWidth=0, imgHeight=0, level=0;
 	CFStringRef message = NULL;
 	CFStringRef thread = NULL;
 
@@ -814,54 +825,59 @@ static void LoggerLogToConsole(CFDataRef data)
 			case PART_KEY_IMAGE_HEIGHT:
 				imgHeight = (partType == PART_TYPE_INT32 ? (int)value32 : (int)value64);
 				break;
+            case PART_KEY_LEVEL:
+                level = (int)value32;
+                break;
 			default:
 				break;
 		}
 		if (part != NULL)
 			CFRelease(part);
 	}
-
-	// Prepare the final representation and log to console
-	CFMutableStringRef s = CFStringCreateMutable(NULL, 0);
-
-	char buf[32];
-	struct tm t;
-	gmtime_r(&timestamp.tv_sec, &t);
-	strftime(buf, sizeof(buf)-1, "%T", &t);
-	CFStringRef ts = CFStringCreateWithBytesNoCopy(
-                                                   NULL,
-                                                   (const UInt8 *)buf,
-                                                   (CFIndex)strlen(buf),
-                                                   kCFStringEncodingASCII,
-                                                   false,
-                                                   kCFAllocatorNull);
-	CFStringAppend(s, ts);
-	CFRelease(ts);
-
-	if (contentsType == PART_TYPE_IMAGE)
-		message = CFStringCreateWithFormat(NULL, NULL, CFSTR("<image width=%d height=%d>"), imgWidth, imgHeight);
-
-	buf[0] = 0;
-	if (thread != NULL && CFStringGetLength(thread) < 16)
-	{
-		int n = 16 - (int)CFStringGetLength(thread);
-		memset(buf, ' ', (size_t)n);
-		buf[n] = 0;
-	}
-	CFStringAppendFormat(s, NULL, CFSTR(".%04d %s%@ | %@"),
-						 (int)(timestamp.tv_usec / 1000),
-						 buf, (thread == NULL) ? CFSTR("") : thread,
-						 (message != NULL) ? message : CFSTR(""));
-
-	if (thread != NULL)
-		CFRelease(thread);
-	if (message != NULL)
-		CFRelease(message);
-
-	if (type == LOGMSG_TYPE_LOG || type == LOGMSG_TYPE_MARK)
-		CFShow(s);
-
-	CFRelease(s);
+    
+    if (level <= maxLogLevel) {
+        // Prepare the final representation and log to console
+        CFMutableStringRef s = CFStringCreateMutable(NULL, 0);
+        
+        char buf[32];
+        struct tm t;
+        gmtime_r(&timestamp.tv_sec, &t);
+        strftime(buf, sizeof(buf)-1, "%T", &t);
+        CFStringRef ts = CFStringCreateWithBytesNoCopy(
+                                                       NULL,
+                                                       (const UInt8 *)buf,
+                                                       (CFIndex)strlen(buf),
+                                                       kCFStringEncodingASCII,
+                                                       false,
+                                                       kCFAllocatorNull);
+        CFStringAppend(s, ts);
+        CFRelease(ts);
+        
+        if (contentsType == PART_TYPE_IMAGE)
+            message = CFStringCreateWithFormat(NULL, NULL, CFSTR("<image width=%d height=%d>"), imgWidth, imgHeight);
+        
+        buf[0] = 0;
+        if (thread != NULL && CFStringGetLength(thread) < 16)
+        {
+            int n = 16 - (int)CFStringGetLength(thread);
+            memset(buf, ' ', (size_t)n);
+            buf[n] = 0;
+        }
+        CFStringAppendFormat(s, NULL, CFSTR(".%04d %s%@ | %@"),
+                             (int)(timestamp.tv_usec / 1000),
+                             buf, (thread == NULL) ? CFSTR("") : thread,
+                             (message != NULL) ? message : CFSTR(""));
+        
+        if (thread != NULL)
+            CFRelease(thread);
+        if (message != NULL)
+            CFRelease(message);
+        
+        if (type == LOGMSG_TYPE_LOG || type == LOGMSG_TYPE_MARK)
+            CFShow(s);
+        
+        CFRelease(s);
+    }
 }
 
 static void LoggerWriteMoreData(Logger *logger)
@@ -875,7 +891,7 @@ static void LoggerWriteMoreData(Logger *logger)
 			pthread_mutex_lock(&logger->logQueueMutex);
 			while (CFArrayGetCount(logger->logQueue))
 			{
-				LoggerLogToConsole((CFDataRef)CFArrayGetValueAtIndex(logger->logQueue, 0));
+				LoggerLogToConsole((CFDataRef)CFArrayGetValueAtIndex(logger->logQueue, 0), logger->maxConsoleLevel);
 				CFArrayRemoveValueAtIndex(logger->logQueue, 0);
 			}
 			pthread_mutex_unlock(&logger->logQueueMutex);
@@ -937,7 +953,7 @@ static void LoggerWriteMoreData(Logger *logger)
 					memcpy(logger->sendBuffer + logger->sendBufferUsed, CFDataGetBytePtr(d), (size_t)dsize);
 					logger->sendBufferUsed += (NSUInteger)dsize;
 					if (logToConsole)
-						LoggerLogToConsole(d);
+						LoggerLogToConsole(d, logger->maxConsoleLevel);
 					CFArrayRemoveValueAtIndex(logger->logQueue, 0);
 					logger->incompleteSendOfFirstItem = NO;
 				}
@@ -2442,7 +2458,7 @@ static void LoggerPushMessageToQueue(Logger *logger, CFDataRef message)
 		pthread_mutex_lock(&logger->logQueueMutex);
 		while (CFArrayGetCount(logger->logQueue))
 		{
-			LoggerLogToConsole(CFArrayGetValueAtIndex(logger->logQueue, 0));
+			LoggerLogToConsole(CFArrayGetValueAtIndex(logger->logQueue, 0), logger->maxConsoleLevel);
 			CFArrayRemoveValueAtIndex(logger->logQueue, 0);
 		}
 		pthread_mutex_unlock(&logger->logQueueMutex);

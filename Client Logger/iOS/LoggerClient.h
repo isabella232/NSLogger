@@ -73,7 +73,7 @@ enum {
 								 kLoggerOption_BrowseBonjour |				\
 								 kLoggerOption_BrowseOnlyLocalDomain |		\
 								 kLoggerOption_UseSSL |						\
-								 kLoggerOption_CaptureSystemConsole)
+								 kLoggerOption_LogToConsole)
 
 /* -----------------------------------------------------------------
  * Structure defining a Logger
@@ -118,6 +118,7 @@ typedef struct
 	uint32_t options;								// Flags, see enum above
 	CFStringRef bonjourServiceType;					// leave NULL to use the default
 	CFStringRef bonjourServiceName;					// leave NULL to use the first one available
+    uint32_t maxConsoleLevel;
 
 	// internal state
 	BOOL targetReachable;							// Set to YES when the Reachability target (host or internet) is deemed reachable
@@ -156,6 +157,9 @@ extern Logger* LoggerInit(void);
 // Set logger options if you don't want the default options (see above)
 extern void LoggerSetOptions(Logger *logger, uint32_t options);
 
+// Set the max log level that will be logged to the console if console logging is enabled
+extern void LoggerSetConsoleLogLevel(Logger *logger, uint32_t level);
+    
 // Set Bonjour logging names, so you can force the logger to use a specific service type
 // or direct logs to the machine on your network which publishes a specific name
 extern void LoggerSetupBonjour(Logger *logger, CFStringRef bonjourServiceType, CFStringRef bonjourServiceName);
