@@ -2,11 +2,23 @@
 .DS_Store
 
 # Xcode
-build/
+build/*
+build_products
+
 *.pbxuser
-*.perspectivev3
+!default.pbxuser
+
 *.mode1v3
+!default.mode1v3
+
 *.mode2v3
+!default.mode2v3
+
+*.perspectivev3
+!default.perspectivev3
+
+xcuserdata
+*.xccheckout
 
 # The HockeyApp configuration file contains the AppID
 # we don't want it to be duplicated in forks - therefore,
