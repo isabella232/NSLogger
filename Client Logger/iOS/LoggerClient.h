@@ -69,9 +69,7 @@ enum {
 	kLoggerOption_CaptureSystemConsole				= 0x20
 };
 
-#define LOGGER_DEFAULT_OPTIONS	(kLoggerOption_BufferLogsUntilConnection |	\
-								 kLoggerOption_BrowseBonjour |				\
-								 kLoggerOption_BrowseOnlyLocalDomain |		\
+#define LOGGER_DEFAULT_OPTIONS	(kLoggerOption_BrowseOnlyLocalDomain |		\
 								 kLoggerOption_UseSSL |						\
 								 kLoggerOption_LogToConsole)
 
