@@ -51,6 +51,8 @@
 #endif
 #import <fcntl.h>
 
+NSString *const kNSLoggerBonjourServiceConnectedStatusChangeNotification = @"kNSLoggerBonjourServiceConnectedStatusChangeNotification";
+
 /* --------------------------------------------------------------------------------
  * IMPLEMENTATION NOTES:
  *
@@ -312,13 +314,34 @@ void LoggerSetOptions(Logger *logger, uint32_t options)
     // If we choose to log to system console
     // make sure we are not configured to capture the system console
     // When debugging NSLogger itself, we never capture the system console either
-    if (options & kLoggerOption_LogToConsole)
+    if (options & kLoggerOption_LogToConsole) {
         options &= (uint32_t)~kLoggerOption_CaptureSystemConsole;
+    }
     
-    if (logger == NULL)
+    if (logger == NULL) {
         logger = LoggerGetDefaultLogger();
-    if (logger != NULL)
+    }
+
+    if (logger != NULL) {
+        BOOL bonjourOptionsChanged = NO;
+        
+        if (((options & kLoggerOption_BrowseBonjour) != (logger->options & kLoggerOption_BrowseBonjour))
+            || ((options & kLoggerOption_BrowseOnlyLocalDomain) != (logger->options & kLoggerOption_BrowseOnlyLocalDomain))) {
+            bonjourOptionsChanged = YES;
+        }
+        
         logger->options = options;
+        
+        if (logger->remoteOptionsChangedSource != NULL 
+            && bonjourOptionsChanged) {
+                CFRunLoopSourceSignal(logger->remoteOptionsChangedSource);
+        }
+    }
+        
+    
+    
+        
+    
 }
 
 void LoggerSetupBonjour(Logger *logger, CFStringRef bonjourServiceType, CFStringRef bonjourServiceName)
@@ -1932,6 +1955,11 @@ static void LoggerWriteStreamTerminated(Logger *logger)
 	{
 		LOGGERDBG(CFSTR("-> Logger DISCONNECTED"));
 		logger->connected = NO;
+#if ALLOW_COCOA_USE
+        @autoreleasepool {
+            [[NSNotificationCenter defaultCenter] postNotificationName:kNSLoggerBonjourServiceConnectedStatusChangeNotification object:nil];   
+        }
+#endif
 	}
 
 	if (logger->logStream != NULL)
@@ -1982,6 +2010,12 @@ static void LoggerWriteStreamCallback(CFWriteStreamRef ws, CFStreamEventType eve
 			// write existing buffer contents
 			LOGGERDBG(CFSTR("Logger CONNECTED"));
 			logger->connected = YES;
+#if ALLOW_COCOA_USE
+            @autoreleasepool {
+                [[NSNotificationCenter defaultCenter] postNotificationName:kNSLoggerBonjourServiceConnectedStatusChangeNotification object:nil];   
+            }
+#endif
+            
 			LoggerStopBonjourBrowsing(logger);
 			LoggerStopReconnectTimer(logger);
 			if (logger->bufferWriteStream != NULL)

@@ -44,6 +44,8 @@
 #import <CoreServices/CoreServices.h>
 #endif
 
+extern NSString *const kNSLoggerBonjourServiceConnectedStatusChangeNotification;
+
 // This define is here so that user application can test whether NSLogger Client is
 // being included in the project, and potentially configure their macros accordingly
 #define NSLOGGER_WAS_HERE		1
@@ -141,15 +143,10 @@ extern void LoggerSetDefaultLogger(Logger *aLogger);
 // Get the default logger, create one if it does not exist
 extern Logger *LoggerGetDefaultLogger(void);
 
-// Checks whether the default logger exists, returns it if YES, otherwise do NO create one
+// Checks whether the default logger exists, returns it if YES, otherwise do NOT create one
 extern Logger *LoggerCheckDefaultLogger(void);
 
 // Initialize a new logger, set as default logger if this is the first one
-// Options default to:
-// - logging to console = NO
-// - buffer until connection = YES
-// - browse Bonjour = YES
-// - browse only locally on Bonjour = YES
 extern Logger* LoggerInit(void);
 
 // Set logger options if you don't want the default options (see above)
